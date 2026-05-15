@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # 1. Relational Storage Layer
+  postgres:
+    image: postgres:16-alpine
+    container_name: qc-postgres
+    environment:
+      POSTGRES_USER: leelogic_admin
+      POSTGRES_PASSWORD: supersecretpassword
+      POSTGRES_DB: QuoteComparerDb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - qc-network
+
+  # 2. Real-Time Distributed Messaging & Streaming
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: qc-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - qc-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: qc-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - qc-network
+
+  # 3. High-Performance Caching & Distributed Session State
+  redis:
+    image: redis:7.2-alpine
+    container_name: qc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+    networks:
+      - qc-network
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  qc-network:
+    driver: bridge

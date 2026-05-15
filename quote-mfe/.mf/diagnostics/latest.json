@@ -1,0 +1,10 @@
+{
+  "latestErrorEvent": {
+    "code": "TYPE-001",
+    "message": "Failed to generate type declaration. Execute the below cmd to reproduce and fix the error. #TYPE-001\nargs: {\"cmd\":\"npx tsc --project C:\\\\Users\\\\13laa\\\\Documents\\\\Systems\\\\QuoteMaker\\\\quote-mfe\\\\node_modules\\\\.federation\\\\tsconfig.ca2edfd361b8a0f0b9843a1caf781b1b.json\"}\nView the docs to see how to solve: https://module-federation.io/guide/troubleshooting/type#type-001",
+    "args": {
+      "cmd": "npx tsc --project C:\\Users\\13laa\\Documents\\Systems\\QuoteMaker\\quote-mfe\\node_modules\\.federation\\tsconfig.ca2edfd361b8a0f0b9843a1caf781b1b.json"
+    },
+    "timestamp": 1778881683660
+  }
+}
