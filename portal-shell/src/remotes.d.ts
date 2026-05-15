@@ -1,13 +1,13 @@
 // Tells TypeScript that anything imported from your remote module is a valid component
-declare module 'quote_mfe/QuoteForm' {
-  import React from 'react';
+declare module "quote_mfe/QuoteForm" {
+  import React from "react";
 
-    export interface QuoteCalculationPayload {
-        baseAmount: number;
-        vatAmount: number;
-        totalAmount: number;
-        calculatedAt: string;
-    }
+  export interface QuoteCalculationPayload {
+    baseAmount: number;
+    vatAmount: number;
+    totalAmount: number;
+    calculatedAt: string;
+  }
 
   interface QuoteFormProps {
     userFirm?: string;

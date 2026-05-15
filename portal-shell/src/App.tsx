@@ -1,18 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import FederatedComponent from './components/FederatedComponent';
 import type { QuoteCalculationPayload } from 'quote_mfe/QuoteForm';
+import { PlatformEventBus } from './utils/EventBus';
+
 
 export default function App() {
-  // Local shell state to catch the data payload flying up from the MFE
   const [activeQuote, setActiveQuote] = useState<QuoteCalculationPayload | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
 
   const handleQuoteIntercept = (payload: QuoteCalculationPayload) => {
     console.log("[Portal Shell] Intercepted incoming MFE quote data payload:", payload);
     setActiveQuote(payload);
   };
 
+  useEffect(() => {
+    const unsubscribe = PlatformEventBus.subscribe('QUOTE_CALCULATED', (data) => {
+      setNotification(
+        `System Audit Alert: A new premium calculation of R ${data.totalAmount.toLocaleString()} was successfylly evaluated!`
+      );
+
+      const timer = setTimeout(() => setNotification(null), 5000);
+
+      return () => clearTimeout(timer);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 antialiased font-sans">
+
+      {notification && (
+        <div className="fixed top-6 right-6 z-50 p-4 bg-emerald-950/90 backdrop-blur border border-emerald-500/40 text-emerald-300 rounded-xl shadow-2xl max-w-md transition-all duration-300 animate-slide-in">
+          <div className="flex gap-3 items-start">
+            <div className="bg-emerald-500 text-slate-950 rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+              ✓
+            </div>
+            <p className="text-xs m-0 leading-relaxed font-medium">{notification}</p>
+          </div>
+        </div>
+      )}
       
       {/* Navigation Header */}
       <header className="max-w-7xl mx-auto px-6 py-8 border-b border-slate-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -60,10 +87,7 @@ export default function App() {
           {/* Passing the event handler down through the spread operator! */}
           <FederatedComponent
             loader={() => import('quote_mfe/QuoteForm')}
-            componentProps={{ 
-              userFirm: "Lee-Logic Systems",
-              onQuoteCalculated: handleQuoteIntercept // <-- Connected!
-            }}
+            componentProps={{ onQuoteCalculated: handleQuoteIntercept }}
             fallbackMessage="Streaming live quotation matrix assets..."
           />
         </section>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { usePlatform } from "portal_shell/PlatformContext";
+import { PlatformEventBus } from "portal_shell/EventBus";
 
 interface QuoteCalculationPayload {
   baseAmount: number;
@@ -8,16 +10,17 @@ interface QuoteCalculationPayload {
 }
 
 interface QuoteFormProps {
-  userFirm?: string;
   onQuoteCalculated?: (payload: QuoteCalculationPayload) => void;
 }
 
 export default function QuoteForm({
-  userFirm = "Guest",
   onQuoteCalculated,
 }: QuoteFormProps) {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const { state } = usePlatform();
+  const { businessName, taxRate, currency } = state.firmDetails;
 
   const handleCalculate = () => {
     if (!amount) return;
@@ -25,18 +28,21 @@ export default function QuoteForm({
 
     setTimeout(() => {
       const base = parseFloat(amount);
-      const vatRate = 0.15;
-      const vat = base * vatRate;
+      const vat = base * taxRate;
       const total = base + vat;
 
-      if (onQuoteCalculated) {
-        onQuoteCalculated({
+      const payload = {
           baseAmount: base,
           vatAmount: vat,
           totalAmount: total,
           calculatedAt: new Date().toLocaleTimeString(),
-        });
+        };
+
+      if (onQuoteCalculated) {
+        onQuoteCalculated(payload);
       }
+
+      PlatformEventBus.emit('QUOTE_CALCULATED', payload);
 
       setLoading(false);
     }, 1200);
@@ -49,12 +55,12 @@ export default function QuoteForm({
           Domain Component: Quotes
         </h3>
         <span className="text-xs bg-blue-950 text-blue-300 px-2 py-1 rounded border border-blue-800/50 font-mono">
-          Context: {userFirm}
+          Context: {businessName}
         </span>
       </div>
 
       <div className="flex flex-col gap-3">
-        <label className="text-sm text-slate-400 font-medium">Asset Cover Amount (ZAR)</label>
+        <label className="text-sm text-slate-400 font-medium">Asset Cover Amount ({currency})</label>
         <input
           type="number"
           value={amount}
