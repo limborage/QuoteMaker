@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { usePlatform } from "portal_shell/PlatformContext";
 import { PlatformEventBus } from "portal_shell/EventBus";
+import { useSharedPlatformStore } from "../../hooks/useSharedPlatformStore";
+import { useQuery, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 interface QuoteCalculationPayload {
   baseAmount: number;
@@ -13,14 +15,35 @@ interface QuoteFormProps {
   onQuoteCalculated?: (payload: QuoteCalculationPayload) => void;
 }
 
-export default function QuoteForm({
+const fetchLiveTaxRates = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
+  return {
+    vatMultiplier: 0.15, // 15% South African Standard VAT rate
+    complianceStatus: "Operational",
+    lastSyncedAt: new Date().toLocaleTimeString(),
+  };
+};
+
+function QuoteForm({
   onQuoteCalculated,
 }: QuoteFormProps) {
+  const currentUser = useSharedPlatformStore((state) => state.user);
+  const currentCurrency = useSharedPlatformStore((state) => state.currency);
+  const setGlobalCurrency = useSharedPlatformStore((state)  => state.setCurrency);
+
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { state } = usePlatform();
-  const { businessName, taxRate, currency } = state.firmDetails;
+  const { businessName } = state.firmDetails;
+
+  const activeCurrency = currentCurrency || state.firmDetails.currency;
+
+  const { data: serverRates, isLoading: isFetchingMeta } = useQuery({
+    queryKey: ["livePlatformRates"],
+    queryFn: fetchLiveTaxRates
+  });
 
   const handleCalculate = () => {
     if (!amount) return;
@@ -28,6 +51,7 @@ export default function QuoteForm({
 
     setTimeout(() => {
       const base = parseFloat(amount);
+      const taxRate = serverRates?.vatMultiplier || state.firmDetails.taxRate;
       const vat = base * taxRate;
       const total = base + vat;
 
@@ -50,6 +74,29 @@ export default function QuoteForm({
 
   return (
     <div className="p-6 bg-slate-900 text-white rounded-xl border border-blue-500/40 shadow-xl">
+      <div className="mb-4 p-2.5 bg-blue-950/40 text-blue-300 rounded-lg text-xs flex justify-between items-center border border-blue-900/30">
+        <span>Operator: <strong>{currentUser?.name || "System Base"}</strong> ({currentUser?.role || "Guest"})</span>
+        <span className="text-[10px] text-slate-400">
+          {isFetchingMeta ? "Refreshing sync pipeline..." : `API Rules Cache: ${serverRates?.complianceStatus || "Local Fallback"}`}
+        </span>
+        <div className="flex gap-2">
+          <button 
+            type="button"
+            onClick={() => setGlobalCurrency('ZAR')}
+            className={`px-3 py-1 rounded-md text-sm font-semibold border border-blue-500 cursor-pointer transition-all duration-150 active:scale-95 ${activeCurrency === 'ZAR' ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+          >
+            R
+          </button>
+          <button 
+            type="button"
+            onClick={() => setGlobalCurrency('EUR')}
+            className={`px-3 py-1 rounded-md text-sm font-semibold border border-blue-500 cursor-pointer transition-all duration-150 active:scale-95 ${activeCurrency === 'EUR' ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+          >
+            €
+          </button>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center mb-4">
         <h3 className="m-0 text0-blue-400 font-semibold tracking-wide">
           Domain Component: Quotes
@@ -60,7 +107,7 @@ export default function QuoteForm({
       </div>
 
       <div className="flex flex-col gap-3">
-        <label className="text-sm text-slate-400 font-medium">Asset Cover Amount ({currency})</label>
+        <label className="text-sm text-slate-400 font-medium">Asset Cover Amount ({activeCurrency})</label>
         <input
           type="number"
           value={amount}
@@ -70,17 +117,35 @@ export default function QuoteForm({
         />
         <button
           onClick={handleCalculate}
-          disabled={loading}
-          className={`p-2.5 rounded font-bold transition-all duration-200 select-none
-            ${loading
+          disabled={loading || isFetchingMeta}
+          className={`w-full py-3 rounded-lg font-bold text-sm tracking-wide transition-all duration-200 select-none
+            ${loading || isFetchingMeta
               ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white cursor-pointer shadow-lg shadow-blue-900/20'
+              : 'bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white cursor-pointer shadow-lg shadow-blue-900/40 hover:shadow-blue-700/30'
             }
             `}
         >
           {loading ? "Evaluating Rules..." : "Calculate Premium"}
         </button>
       </div>
+
+      {serverRates?.lastSyncedAt && (
+        <div className="mt-3 text-[10px] text-center text-slate-500 font-mono">
+          Tax configurations verified from central registry at {serverRates.lastSyncedAt}
+        </div>
+      )}
     </div>
+  );
+}
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 1000 * 60 * 5, refetchOnWindowFocus: false } }
+});
+
+export default function QuoteFormWithProvider(props: QuoteFormProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <QuoteForm {...props} />
+    </QueryClientProvider>
   );
 }

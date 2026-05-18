@@ -39,6 +39,7 @@ export default defineConfig(({mode}) => {
     port: 3001,
     strictPort: true,
     origin: 'http://localhost:3001',
+    cors: true,
     headers: {
       'Access-Control-Allow-Origin': '*',
     },

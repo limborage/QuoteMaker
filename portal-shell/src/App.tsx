@@ -1,17 +1,58 @@
 import { useEffect, useState } from 'react';
 import FederatedComponent from './components/FederatedComponent';
-import type { QuoteCalculationPayload } from 'quote_mfe/QuoteForm';
+// import type { QuoteCalculationPayload } from 'quote_mfe/QuoteForm';
 import { PlatformEventBus } from './utils/EventBus';
+import { usePlatformStore } from './store/usePlatformStore';
 
+const MFE_ORIGIN = 'http://localhost:3001';
+
+async function quoteFormLoader() {
+  const { loadRemoteDynamically } = await import('./utils/RuntimeFederation');
+  const moduleNamespace = await loadRemoteDynamically('quote_mfe');
+  const container = moduleNamespace.default || moduleNamespace;
+  if (!container || typeof container.get !== 'function') {
+    throw new Error("The dynamically streamed container does not expose a valid Module Federation interface.");
+  }
+  try {
+    // @ts-ignore
+    const federatedModulePlugin = await import('@module-federation/vite');
+    // @ts-ignore
+    const shareScope = federatedModulePlugin.__federation_shared__ || {};
+    // @ts-ignore
+    await container.init(shareScope);
+  } catch (e) {
+    // @ts-ignore
+    try { await container.init({}); } catch (_) {}
+  }
+  // @ts-ignore
+  const factory = await container.get('./QuoteForm');
+  return factory();
+}
+
+function injectMfeCss(origin: string) {
+  const id = 'mfe-quote-css';
+  if (document.getElementById(id)) return;
+  const link = document.createElement('link');
+  link.id = id;
+  link.rel = 'stylesheet';
+  link.href = `${origin}/src/index.css`;
+  document.head.appendChild(link);
+}
 
 export default function App() {
-  const [activeQuote, setActiveQuote] = useState<QuoteCalculationPayload | null>(null);
+  const [activeQuote, setActiveQuote] = useState<any>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const currency = usePlatformStore((state) => state.currency);
+  const currencySymbol = currency == "ZAR" ? "R" : "€";
 
-  const handleQuoteIntercept = (payload: QuoteCalculationPayload) => {
+  const handleQuoteIntercept = (payload: any) => {
     console.log("[Portal Shell] Intercepted incoming MFE quote data payload:", payload);
     setActiveQuote(payload);
   };
+
+  useEffect(() => {
+    injectMfeCss(MFE_ORIGIN);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = PlatformEventBus.subscribe('QUOTE_CALCULATED', (data) => {
@@ -67,10 +108,10 @@ export default function App() {
           {activeQuote ? (
             <div className="p-4 bg-slate-950 rounded-xl border border-blue-900/40 font-mono text-xs text-slate-300 flex flex-col gap-2 shadow-inner animate-fadeIn">
               <div className="text-blue-400 font-bold border-b border-slate-800 pb-1 text-[10px] tracking-wider uppercase">Captured Live Payload</div>
-              <div>Subtotal: <span className="text-white font-semibold">R {activeQuote.baseAmount.toFixed(2)}</span></div>
-              <div>VAT (15%): <span className="text-white font-semibold">R {activeQuote.vatAmount.toFixed(2)}</span></div>
+              <div>Subtotal: <span className="text-white font-semibold">{currencySymbol} {activeQuote.baseAmount.toFixed(2)}</span></div>
+              <div>VAT (15%): <span className="text-white font-semibold">{currencySymbol} {activeQuote.vatAmount.toFixed(2)}</span></div>
               <div className="text-sm border-t border-slate-800 pt-1 mt-1 text-emerald-400">
-                Total: <span className="font-bold">R {activeQuote.totalAmount.toFixed(2)}</span>
+                Total: <span className="font-bold">{currencySymbol} {activeQuote.totalAmount.toFixed(2)}</span>
               </div>
             </div>
           ) : (
@@ -86,7 +127,7 @@ export default function App() {
           
           {/* Passing the event handler down through the spread operator! */}
           <FederatedComponent
-            loader={() => import('quote_mfe/QuoteForm')}
+            loader={quoteFormLoader}
             componentProps={{ onQuoteCalculated: handleQuoteIntercept }}
             fallbackMessage="Streaming live quotation matrix assets..."
           />

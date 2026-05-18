@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useRef } from 'react';
 import RemoteErrorBoundary from './RemoteErrorBoundary';
 
 interface FederatedComponentProps<T> {
@@ -13,8 +13,9 @@ export default function FederatedComponent<T extends object>({
   fallbackMessage = "Connecting to network service module..."
 }: FederatedComponentProps<T>) {
 
-  const SafeLazyComponent = React.lazy(() => 
-    loader().catch((err) => {
+  const lazyRef = useRef<React.LazyExoticComponent<React.ComponentType<T>> | null>(null);
+  if (!lazyRef.current) {
+    lazyRef.current = React.lazy(() => loader().catch((err) => {
       console.warn("[MFE Loader] Intercepted script load failure:", err);
       
       return {
@@ -32,8 +33,9 @@ export default function FederatedComponent<T extends object>({
           </div>
         )
       };
-    })
-  );
+    }));
+  }
+  const SafeLazyComponent = lazyRef.current;
 
   return (
     <RemoteErrorBoundary>
