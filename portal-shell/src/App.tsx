@@ -1,49 +1,41 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import FederatedComponent from './components/FederatedComponent';
-// import type { QuoteCalculationPayload } from 'quote_mfe/QuoteForm';
+import { loadRemoteComponent } from './utils/RuntimeFederation';
 import { PlatformEventBus } from './utils/EventBus';
 import { usePlatformStore } from './store/usePlatformStore';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 
-const MFE_ORIGIN = 'http://localhost:3001';
-
-async function quoteFormLoader() {
-  const { loadRemoteDynamically } = await import('./utils/RuntimeFederation');
-  const moduleNamespace = await loadRemoteDynamically('quote_mfe');
-  const container = moduleNamespace.default || moduleNamespace;
-  if (!container || typeof container.get !== 'function') {
-    throw new Error("The dynamically streamed container does not expose a valid Module Federation interface.");
-  }
-  try {
-    // @ts-ignore
-    const federatedModulePlugin = await import('@module-federation/vite');
-    // @ts-ignore
-    const shareScope = federatedModulePlugin.__federation_shared__ || {};
-    // @ts-ignore
-    await container.init(shareScope);
-  } catch (e) {
-    // @ts-ignore
-    try { await container.init({}); } catch (_) {}
-  }
-  // @ts-ignore
-  const factory = await container.get('./QuoteForm');
-  return factory();
+// Explicitly define the schema contract mapping to our OPA / Remote sync properties
+interface PlatformRatesSchema {
+  vatMultiplier: number;
+  complianceStatus: string;
+  rulesetVersion: string;
+  schemaVersion: string;
 }
 
-function injectMfeCss(origin: string) {
-  const id = 'mfe-quote-css';
-  if (document.getElementById(id)) return;
-  const link = document.createElement('link');
-  link.id = id;
-  link.rel = 'stylesheet';
-  link.href = `${origin}/src/index.css`;
-  document.head.appendChild(link);
-}
+const quoteFormLoader = () => loadRemoteComponent('quote_mfe', './QuoteForm');
 
 export default function App() {
   const [activeQuote, setActiveQuote] = useState<any>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const currency = usePlatformStore((state) => state.currency);
   const currencySymbol = currency == "ZAR" ? "R" : "€";
+  const queryClient = useQueryClient();
+
+  
+
+  const { data: serverRates, isFetching } = useQuery<PlatformRatesSchema>({
+    queryKey: ["livePlatformRates"],
+    queryFn: async () => {
+      const activeCache = queryClient.getQueryData<PlatformRatesSchema>(["livePlatformRates"]);
+
+      return activeCache ?? null;
+    },
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false
+  });
 
   const handleQuoteIntercept = (payload: any) => {
     console.log("[Portal Shell] Intercepted incoming MFE quote data payload:", payload);
@@ -51,13 +43,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    injectMfeCss(MFE_ORIGIN);
-  }, []);
-
-  useEffect(() => {
     const unsubscribe = PlatformEventBus.subscribe('QUOTE_CALCULATED', (data) => {
       setNotification(
-        `System Audit Alert: A new premium calculation of R ${data.totalAmount.toLocaleString()} was successfylly evaluated!`
+        `System Audit Alert: A new premium calculation of R ${data.totalAmount.toLocaleString()} was successfully evaluated!`
       );
 
       const timer = setTimeout(() => setNotification(null), 5000);
@@ -99,14 +87,34 @@ export default function App() {
         
         {/* Left Column: Shell Tracking Dashboard */}
         <section className="lg:col-span-1 p-6 bg-slate-900/40 border border-slate-800/60 rounded-2xl flex flex-col gap-4">
-          <h2 className="text-lg font-bold text-slate-200">Shell State Monitor</h2>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            This module panel tracks state records inside the host container memory space.
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-slate-200">Shell State Monitor</h2>
+            {/* Live Server Network Indicator Badge */}
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+              isFetching 
+                ? 'bg-amber-950/40 border-amber-500/30 text-amber-400 animate-pulse' 
+                : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400'
+            }`}>
+              {isFetching ? "Syncing API Cache..." : "Cache Linked"}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Tracking active state records inside host memory and shared network contexts.
           </p>
 
-          {/* Conditional Display showing the data caught from the MFE */}
+          {/* Now safe, fully typed, and clean without messy inline casting! */}
+          {serverRates && (
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 font-mono text-[11px] text-slate-400 flex flex-col gap-1.5">
+              <div className="text-slate-500 font-bold uppercase text-[9px] tracking-wider mb-0.5">Shared Cache Layers</div>
+              <div>Ruleset Version: <span className="text-blue-400 font-semibold">{serverRates.rulesetVersion}</span></div>
+              <div>Registry Rules Status: <span className="text-emerald-400 font-semibold">{serverRates.complianceStatus}</span></div>
+            </div>
+          )}
+
+          {/* Conditional Display showing the data caught from the MFE via Event Bus */}
           {activeQuote ? (
-            <div className="p-4 bg-slate-950 rounded-xl border border-blue-900/40 font-mono text-xs text-slate-300 flex flex-col gap-2 shadow-inner animate-fadeIn">
+            <div className="p-4 bg-slate-950 rounded-xl border border-blue-900/40 font-mono text-xs text-slate-300 flex flex-col gap-2 shadow-inner animate-fadeIn mt-2">
               <div className="text-blue-400 font-bold border-b border-slate-800 pb-1 text-[10px] tracking-wider uppercase">Captured Live Payload</div>
               <div>Subtotal: <span className="text-white font-semibold">{currencySymbol} {activeQuote.baseAmount.toFixed(2)}</span></div>
               <div>VAT (15%): <span className="text-white font-semibold">{currencySymbol} {activeQuote.vatAmount.toFixed(2)}</span></div>

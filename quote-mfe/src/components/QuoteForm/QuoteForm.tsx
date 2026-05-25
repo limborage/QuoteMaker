@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePlatform } from "portal_shell/PlatformContext";
 import { PlatformEventBus } from "portal_shell/EventBus";
 import { useSharedPlatformStore } from "../../hooks/useSharedPlatformStore";
@@ -21,7 +21,8 @@ const fetchLiveTaxRates = async () => {
   return {
     vatMultiplier: 0.15, // 15% South African Standard VAT rate
     complianceStatus: "Operational",
-    lastSyncedAt: new Date().toLocaleTimeString(),
+    rulesetVersion: "v2026.2.1",
+    schemaVersion: "1.0.4"
   };
 };
 
@@ -138,13 +139,19 @@ function QuoteForm({
   );
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 60 * 5, refetchOnWindowFocus: false } }
-});
-
 export default function QuoteFormWithProvider(props: QuoteFormProps) {
+  const finalQueryClient = useMemo(() => {
+    if ((window as any).__PORTAL_QUERY_CLIENT__) {
+      return (window as any).__PORTAL_QUERY_CLIENT__;
+    }
+
+    return new QueryClient({
+      defaultOptions: { queries: { staleTime: 1000 * 60 * 5, refetchOnWindowFocus: false } }
+    });
+  }, []);
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={finalQueryClient}>
       <QuoteForm {...props} />
     </QueryClientProvider>
   );
